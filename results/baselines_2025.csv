@@ -1,0 +1,4 @@
+,MAE (MW),RMSE (MW),MAPE (%)
+Persistence (lag 24h),758.0,1030.4,4.6
+Weekly persistence (lag 168h),1197.0,1673.0,7.0
+Average of lag 24h & 168h,808.5,1105.6,4.8

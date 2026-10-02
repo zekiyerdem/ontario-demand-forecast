@@ -1,0 +1,6 @@
+,MAE (MW),RMSE (MW),MAPE (%),Daily peak MAE (MW),Daily peak MAPE (%)
+Persistence (lag 24h),758.0,1030.4,4.6,718.6,3.8
+Weekly persistence (lag 168h),1197.0,1673.0,7.0,1265.2,6.6
+Ridge regression,576.2,718.7,3.5,596.2,3.1
+"LightGBM, no weather",638.4,875.5,3.7,763.8,3.9
+"LightGBM, with weather",447.9,583.3,2.6,536.6,2.8

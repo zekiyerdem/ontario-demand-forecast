@@ -1,0 +1,8 @@
+pandas>=2.0
+numpy
+matplotlib
+requests
+scikit-learn
+lightgbm
+holidays
+jupyter
