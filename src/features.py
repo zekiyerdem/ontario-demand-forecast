@@ -22,7 +22,7 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 def add_calendar(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     idx = out.index
-    on_hols = holidays.Canada(prov="ON", years=range(idx.year.min(), idx.year.max() + 1))
+    on_hols = holidays.Canada(subdiv="ON", years=range(idx.year.min(), idx.year.max() + 1))
     out["hour"] = idx.hour
     out["dow"] = idx.dayofweek
     out["month"] = idx.month

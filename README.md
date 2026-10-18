@@ -52,6 +52,7 @@ Setup: at the end of day D-1, forecast all 24 hours of day D. Train 2019–2023,
 ```
 src/data.py        download + merge IESO demand and weather (cached to data/)
 src/features.py    calendar, holiday, heating/cooling-degree and lag features
+tests/             pytest unit tests for the feature pipeline (incl. a no-leakage check)
 figures/           charts used in this README
 results/           baseline and test-set metric tables (CSV)
 ```
@@ -62,7 +63,10 @@ results/           baseline and test-set metric tables (CSV)
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
 jupyter notebook                   # run notebooks 02 and 03
+python -m pytest                   # unit tests (no data download needed)
 ```
+
+The tests run on small synthetic series. Besides checking lags, degree-days and holiday flags, they verify there is no leakage: changing demand on the forecast day never changes that day's features.
 
 ## Next steps
 

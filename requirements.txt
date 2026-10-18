@@ -6,3 +6,4 @@ scikit-learn
 lightgbm
 holidays
 jupyter
+pytest
