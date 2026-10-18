@@ -1,5 +1,7 @@
 # Ontario Electricity Demand Forecasting
 
+[![tests](https://github.com/zekiyerdem/ontario-demand-forecast/actions/workflows/tests.yml/badge.svg)](https://github.com/zekiyerdem/ontario-demand-forecast/actions/workflows/tests.yml)
+
 Day-ahead forecasting of Ontario's hourly electricity demand using public IESO data (2019–2026) and hourly weather.
 
 **Result on the 2025 test year:** a LightGBM model with calendar and weather features forecasts next-day hourly demand with **2.6% MAPE (448 MW MAE)**, **41% lower error** than the "same hour yesterday" baseline, and predicts each day's peak within **2.8%** on average.
@@ -66,7 +68,7 @@ jupyter notebook                   # run notebooks 02 and 03
 python -m pytest                   # unit tests (no data download needed)
 ```
 
-The tests run on small synthetic series. Besides checking lags, degree-days and holiday flags, they verify there is no leakage: changing demand on the forecast day never changes that day's features.
+The tests run on small synthetic series. Besides checking lags, degree-days and holiday flags, they verify there is no leakage: changing demand on the forecast day never changes that day's features. GitHub Actions runs them on every push (Python 3.11 and 3.12).
 
 ## Next steps
 
