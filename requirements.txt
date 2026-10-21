@@ -4,6 +4,7 @@ matplotlib
 requests
 scikit-learn
 lightgbm
+shap
 holidays
 jupyter
 pytest

@@ -33,6 +33,18 @@ Setup: at the end of day D-1, forecast all 24 hours of day D. Train 2019–2023,
 
   ![Seasonal daily profile](figures/seasonal_daily_profile.png)
 
+## What drives the forecast (SHAP, 2025 test year)
+
+SHAP splits every hourly forecast into additive contributions in MW from each feature (`04_shap_explainability.ipynb`).
+
+![SHAP summary, 2025](figures/shap_summary_2025.png)
+
+- **Yesterday's demand is the backbone.** Same-hour-yesterday demand (`lag_24`) moves the forecast by 1,176 MW on average, about three times the next feature (hour of day, 375 MW). Recent-demand features account for 47% of the total SHAP contribution, weather 29%, calendar 24%.
+- **The temperature response is U-shaped and lopsided.** The temperature contribution bottoms out near a 12 °C daily mean (−949 MW). The coldest 2025 day (−13.8 °C) adds +933 MW; the hottest (30.6 °C) adds +3,235 MW. Days above 25 °C average +2,037 MW against +860 MW below −10 °C: cooling load moves Ontario demand far more than heating load.
+- **Weather corrects persistence.** A warm previous day pushes the forecast down while a warm forecast day pushes it up, so the model effectively swaps yesterday's temperature effect (already inside `lag_24`) for today's. That is how it anticipates cold snaps and heat waves that persistence misses.
+
+  ![Temperature effect learned by the model](figures/shap_temperature_2025.png)
+
 ## Notebooks
 
 | Notebook | What it covers |
@@ -40,6 +52,7 @@ Setup: at the end of day D-1, forecast all 24 hours of day D. Train 2019–2023,
 | `01_exploration.ipynb` | Loading 2025 IESO data, timestamp handling, daily/weekly profiles, winter peak analysis |
 | `02_weather_and_baselines.ipynb` | Demand–temperature relationship, seasonal profiles, annual trend, persistence baselines |
 | `03_day_ahead_models.ipynb` | Ridge and LightGBM day-ahead models, weather ablation, 2025 test, error by month, feature importance |
+| `04_shap_explainability.ipynb` | SHAP explanation of the LightGBM model on 2025: top drivers, lags vs weather vs calendar, learned temperature curve |
 
 ## Data
 
@@ -64,7 +77,7 @@ results/           baseline and test-set metric tables (CSV)
 ```bash
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
-jupyter notebook                   # run notebooks 02 and 03
+jupyter notebook                   # run notebooks 02, 03 and 04
 python -m pytest                   # unit tests (no data download needed)
 ```
 
@@ -77,4 +90,4 @@ The tests run on small synthetic series. Besides checking lags, degree-days and 
 - Probabilistic (quantile) forecasts for peak-risk planning
 - SARIMAX and LSTM comparisons
 
-**Stack:** Python, pandas, scikit-learn, LightGBM, matplotlib
+**Stack:** Python, pandas, scikit-learn, LightGBM, SHAP, matplotlib
