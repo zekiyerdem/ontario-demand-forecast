@@ -45,6 +45,24 @@ SHAP splits every hourly forecast into additive contributions in MW from each fe
 
   ![Temperature effect learned by the model](figures/shap_temperature_2025.png)
 
+## Where the model misses (error analysis, 2025)
+
+Breaking the 2025 error down by hour, day type and sign (`05_error_analysis.ipynb`):
+
+![Error by hour of day and day type, 2025](figures/error_by_hour_daytype_2025.png)
+
+| Day type | Days | LightGBM MAPE (%) | Persistence MAPE (%) | Bias (MW) |
+|---|---:|---:|---:|---:|
+| Regular weekday | 246 | 2.40 | 4.31 | −240 |
+| Weekend | 102 | 3.07 | 5.07 | −400 |
+| Statutory holiday | 9 | 3.53 | 5.02 | −386 |
+| Day after a holiday | 8 | 3.37 | 6.17 | −558 |
+
+- **Midday is hardest.** MAPE is 2.30% overnight (22:00–04:59) and 3.14% for 10:00–15:59, rising to 3.55% for those hours in June–August.
+- **Weekends and holidays are harder than weekdays.** After a holiday, persistence breaks down (6.17%) because yesterday was a low-demand day; the calendar features keep the model at 3.37%. Boxing Day was the worst day of 2025 (9.17% MAPE, 1,657 MW under-forecast).
+- **The model under-forecasts 2025 across the board.** Mean error is −295 MW, 76% of hours are under-forecast, and every month has a negative bias. Demand grew 4.0% over 2024, and tree models cannot predict above the levels they were trained on. As a diagnostic, removing that offset would cut MAPE from 2.63% to 2.21%, so handling load growth is the largest single improvement available.
+- **The worst days are hot weekends.** Of the 10 worst days, 9 are under-forecast, 8 are weekends or holidays and 5 have a daily mean of 23 °C or more.
+
 ## Notebooks
 
 | Notebook | What it covers |
@@ -53,6 +71,7 @@ SHAP splits every hourly forecast into additive contributions in MW from each fe
 | `02_weather_and_baselines.ipynb` | Demand–temperature relationship, seasonal profiles, annual trend, persistence baselines |
 | `03_day_ahead_models.ipynb` | Ridge and LightGBM day-ahead models, weather ablation, 2025 test, error by month, feature importance |
 | `04_shap_explainability.ipynb` | SHAP explanation of the LightGBM model on 2025: top drivers, lags vs weather vs calendar, learned temperature curve |
+| `05_error_analysis.ipynb` | Error by hour of day, weekday/weekend, holidays and the day after; forecast bias and load growth; the 10 worst days of 2025 |
 
 ## Data
 
@@ -77,7 +96,7 @@ results/           baseline and test-set metric tables (CSV)
 ```bash
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
-jupyter notebook                   # run notebooks 02, 03 and 04
+jupyter notebook                   # run notebooks 02 to 05
 python -m pytest                   # unit tests (no data download needed)
 ```
 
@@ -85,6 +104,7 @@ The tests run on small synthetic series. Besides checking lags, degree-days and 
 
 ## Next steps
 
+- Handle load growth (trend term or year-over-year target) to remove the 2025 under-forecast bias
 - Archived weather *forecasts* instead of observed weather
 - Population-weighted temperature across Ontario cities; humidex for summer peaks
 - Probabilistic (quantile) forecasts for peak-risk planning
