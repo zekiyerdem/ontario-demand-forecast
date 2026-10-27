@@ -63,6 +63,23 @@ Breaking the 2025 error down by hour, day type and sign (`05_error_analysis.ipyn
 - **The model under-forecasts 2025 across the board.** Mean error is −295 MW, 76% of hours are under-forecast, and every month has a negative bias. Demand grew 4.0% over 2024, and tree models cannot predict above the levels they were trained on. As a diagnostic, removing that offset would cut MAPE from 2.63% to 2.21%, so handling load growth is the largest single improvement available.
 - **The worst days are hot weekends.** Of the 10 worst days, 9 are under-forecast, 8 are weekends or holidays and 5 have a daily mean of 23 °C or more.
 
+## Peak demand (2025)
+
+How well the model forecasts each day's peak, in MW and timing (`06_peak_demand.ipynb`):
+
+| Days | Peak MAPE, LightGBM (%) | Peak MAPE, persistence (%) | Peak bias (MW) | Peak hour within 1 h, LightGBM (%) |
+|---|---:|---:|---:|---:|
+| All of 2025 (365) | 2.76 | 3.84 | −412 | 84 |
+| Winter, Dec–Feb (90) | 2.65 | 2.75 | −516 | 97 |
+| Summer, Jun–Aug (92) | 3.81 | 5.27 | −558 | 82 |
+| 20 highest-demand days | 4.75 | 3.95 | −1,122 | 80 |
+
+- **Peak timing is reliable.** The forecast peak hour is exact on 55% of days and within one hour on 84% (persistence: 76%). Winter peaks are regular (62% at 17:00); summer peaks spread over 16:00–18:00.
+- **The peak is under-forecast on 83% of days**, by more than the all-hours bias, so load growth hurts most at the peak.
+- **The highest-demand days are the weak spot.** All 20 are summer days (22,918–24,862 MW). The model under-forecasts every one of them and persistence does better there. The 2025 peak of 24,862 MW (24 June, 18:00 EST) was forecast at 24,234 MW.
+
+![The 10 worst daily-peak forecasts of 2025](figures/worst_peak_days_2025.png)
+
 ## Notebooks
 
 | Notebook | What it covers |
@@ -72,6 +89,7 @@ Breaking the 2025 error down by hour, day type and sign (`05_error_analysis.ipyn
 | `03_day_ahead_models.ipynb` | Ridge and LightGBM day-ahead models, weather ablation, 2025 test, error by month, feature importance |
 | `04_shap_explainability.ipynb` | SHAP explanation of the LightGBM model on 2025: top drivers, lags vs weather vs calendar, learned temperature curve |
 | `05_error_analysis.ipynb` | Error by hour of day, weekday/weekend, holidays and the day after; forecast bias and load growth; the 10 worst days of 2025 |
+| `06_peak_demand.ipynb` | Daily peak MW and peak-hour accuracy, by season and on the highest-demand days; the 10 worst peak days of 2025 |
 
 ## Data
 
@@ -96,7 +114,7 @@ results/           baseline and test-set metric tables (CSV)
 ```bash
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
-jupyter notebook                   # run notebooks 02 to 05
+jupyter notebook                   # run notebooks 02 to 06
 python -m pytest                   # unit tests (no data download needed)
 ```
 
