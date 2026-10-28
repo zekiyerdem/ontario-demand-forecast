@@ -4,7 +4,7 @@
 
 Day-ahead forecasting of Ontario's hourly electricity demand using public IESO data (2019–2026) and hourly weather.
 
-**Result on the 2025 test year:** a LightGBM model with calendar and weather features forecasts next-day hourly demand with **2.6% MAPE (448 MW MAE)**, **41% lower error** than the "same hour yesterday" baseline, and predicts each day's peak within **2.8%** on average.
+**Result on the 2025 test year:** a LightGBM model with calendar and weather features forecasts next-day hourly demand with **2.6% MAPE (448 MW MAE)**, **41% lower error** than the "same hour yesterday" baseline, and predicts each day's peak within **2.8%** on average. With a realistic **09:00 EST forecast deadline** on the day before, the honest numbers are **3.2% MAPE (541 MW MAE)** and **3.5% daily-peak MAPE**, half the error of the best forecast possible at that time without a model ([details](#realistic-forecast-deadline-0900-cutoff)).
 
 ![Forecast vs actual, winter and summer weeks of 2025](figures/forecast_weeks_2025.png)
 
@@ -18,7 +18,7 @@ Day-ahead forecasting of Ontario's hourly electricity demand using public IESO d
 | LightGBM, no weather features | 638 | 876 | 3.7 | 3.9 |
 | **LightGBM, with weather features** | **448** | **583** | **2.6** | **2.8** |
 
-Setup: at the end of day D-1, forecast all 24 hours of day D. Train 2019–2023, tune on 2024, refit on 2019–2024, test on 2025.
+Setup: at the end of day D-1 (midnight), forecast all 24 hours of day D. Train 2019–2023, tune on 2024, refit on 2019–2024, test on 2025. The section on the 09:00 cutoff below shows the same model under a realistic morning deadline.
 
 ## Key findings
 
@@ -80,6 +80,25 @@ How well the model forecasts each day's peak, in MW and timing (`06_peak_demand.
 
 ![The 10 worst daily-peak forecasts of 2025](figures/worst_peak_days_2025.png)
 
+## Realistic forecast deadline (09:00 cutoff)
+
+The results above assume the forecast is made at midnight, when all of D-1 is known. A real day-ahead forecast is due in the morning of D-1, so at **09:00 EST** only D-1 hours 00:00–08:00 are known: same-hour-yesterday demand (`lag_24`) is missing for most hours, and yesterday's mean and max are not known yet. `src/features.py` has a `cutoff_hour` setting for this (`0` = midnight, the default; `9` = 09:00), and the tests check that no feature uses demand after the cutoff (`07_forecast_cutoff.ipynb`).
+
+| Cutoff | Model | MAE (MW) | MAPE (%) | Daily peak MAPE (%) |
+|---|---|---:|---:|---:|
+| Midnight | Persistence (same hour yesterday) | 758 | 4.58 | 3.84 |
+| Midnight | LightGBM | 448 | 2.63 | 2.76 |
+| 09:00 | Persistence (same hour 2 days ago) | 1,080 | 6.52 | 5.66 |
+| 09:00 | Persistence (same hour last week) | 1,197 | 7.05 | 6.59 |
+| 09:00 | **LightGBM** | **541** | **3.17** | **3.46** |
+
+- **The midnight setup is optimistic by about half a point of MAPE.** Moving the deadline to 09:00 adds 93 MW of average error and raises the peak error from 2.76% to 3.46%.
+- **The model is still clearly useful.** At 09:00 it halves the error of the best fair baseline (6.52% → 3.17% MAPE).
+- **The evening loses most.** MAPE for 16:00–23:59 rises from 2.51% to 3.24%, against 2.40% → 2.78% for 00:00–08:59, where `lag_24` is still known. The daily peaks fall in the evening hours.
+- **The model leans on other features.** `lag_24` drops from 67% to 14% of the gain; the one-week and two-day lags take over (30% and 22%), and temperature matters more. The new morning features (last known demand, D-1 morning vs a week earlier) add little so far (about 1.4% of the gain together).
+
+![MAPE by hour of day, midnight vs 09:00 cutoff](figures/cutoff_mape_by_hour_2025.png)
+
 ## Notebooks
 
 | Notebook | What it covers |
@@ -90,6 +109,7 @@ How well the model forecasts each day's peak, in MW and timing (`06_peak_demand.
 | `04_shap_explainability.ipynb` | SHAP explanation of the LightGBM model on 2025: top drivers, lags vs weather vs calendar, learned temperature curve |
 | `05_error_analysis.ipynb` | Error by hour of day, weekday/weekend, holidays and the day after; forecast bias and load growth; the 10 worst days of 2025 |
 | `06_peak_demand.ipynb` | Daily peak MW and peak-hour accuracy, by season and on the highest-demand days; the 10 worst peak days of 2025 |
+| `07_forecast_cutoff.ipynb` | Realistic 09:00 forecast deadline vs midnight: accuracy, fair baselines, error by hour, feature importance |
 
 ## Data
 
@@ -103,7 +123,7 @@ How well the model forecasts each day's peak, in MW and timing (`06_peak_demand.
 
 ```
 src/data.py        download + merge IESO demand and weather (cached to data/)
-src/features.py    calendar, holiday, heating/cooling-degree and lag features
+src/features.py    calendar, holiday, heating/cooling-degree and lag features (midnight or 09:00 cutoff)
 tests/             pytest unit tests for the feature pipeline (incl. a no-leakage check)
 figures/           charts used in this README
 results/           baseline and test-set metric tables (CSV)
@@ -114,16 +134,16 @@ results/           baseline and test-set metric tables (CSV)
 ```bash
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
-jupyter notebook                   # run notebooks 02 to 06
+jupyter notebook                   # run notebooks 02 to 07
 python -m pytest                   # unit tests (no data download needed)
 ```
 
-The tests run on small synthetic series. Besides checking lags, degree-days and holiday flags, they verify there is no leakage: changing demand on the forecast day never changes that day's features. GitHub Actions runs them on every push (Python 3.11 and 3.12).
+The tests run on small synthetic series. Besides checking lags, degree-days and holiday flags, they verify there is no leakage: changing demand after the forecast cutoff (midnight or 09:00 on the day before) never changes the forecast day's features. GitHub Actions runs them on every push (Python 3.11 and 3.12).
 
 ## Next steps
 
 - Handle load growth (trend term or year-over-year target) to remove the 2025 under-forecast bias
-- Archived weather *forecasts* instead of observed weather
+- Archived weather *forecasts* instead of observed weather (with the 09:00 cutoff, for a fully realistic number)
 - Population-weighted temperature across Ontario cities; humidex for summer peaks
 - Probabilistic (quantile) forecasts for peak-risk planning
 - SARIMAX and LSTM comparisons

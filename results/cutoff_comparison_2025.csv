@@ -1,0 +1,6 @@
+Cutoff,Model,MAE (MW),MAPE (%),Daily peak MAPE (%)
+Midnight,"Persistence, same hour yesterday (lag 24h)",758.0,4.58,3.84
+Midnight,LightGBM,447.9,2.63,2.76
+09:00,"Persistence, same hour 2 days ago (lag 48h)",1080.11,6.52,5.66
+09:00,"Persistence, same hour last week (lag 168h)",1197.05,7.05,6.59
+09:00,LightGBM,540.76,3.17,3.46

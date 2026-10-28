@@ -14,6 +14,7 @@ from src.features import (
     add_lags,
     add_weather,
     clean,
+    get_features,
     make_features,
 )
 
@@ -169,3 +170,70 @@ def test_make_features_output():
     assert out.index.min() == df.index.min() + pd.Timedelta(hours=168)
     assert out.index.max() == df.index.max()
     assert out["demand_mw"].equals(df.loc[out.index, "demand_mw"])
+
+
+# ---------- forecast cutoff (cutoff_hour) ----------
+
+def test_cutoff_zero_is_the_default_setup():
+    df = synthetic(days=14)
+    pd.testing.assert_frame_equal(make_features(df), make_features(df, cutoff_hour=0))
+    assert get_features(0) == FEATURES
+
+
+def test_cutoff_hour_out_of_range():
+    with pytest.raises(ValueError):
+        add_lags(synthetic(days=3), cutoff_hour=24)
+
+
+def test_cutoff_9_feature_set():
+    feats = get_features(9)
+    assert "prev_day_mean" not in feats and "prev_day_max" not in feats
+    for col in ["lag_48", "lag_168", "prev2_day_mean", "prev2_day_max",
+                "last_known_demand", "morning_vs_last_week"]:
+        assert col in feats
+
+
+def test_cutoff_9_feature_values():
+    df = synthetic(days=14)
+    out = make_features(df, cutoff_hour=9)
+    y = df["demand_mw"]
+    day = out.loc["2024-06-12"]
+    # lag_24 only for hours already observed at 09:00 on D-1
+    assert day.loc[day.index.hour < 9, "lag_24"].notna().all()
+    assert day.loc[day.index.hour >= 9, "lag_24"].isna().all()
+    np.testing.assert_array_equal(day["lag_24"].iloc[:9].to_numpy(), y.loc["2024-06-11 00:00":"2024-06-11 08:00"].to_numpy())
+    # day-before-yesterday stats
+    assert np.allclose(day["prev2_day_mean"], y.loc["2024-06-10"].mean())
+    assert np.allclose(day["prev2_day_max"], y.loc["2024-06-10"].max())
+    # last demand known at the cutoff: D-1 08:00
+    assert (day["last_known_demand"] == y.loc["2024-06-11 08:00"]).all()
+    # D-1 morning (00-08) vs the same hours a week earlier (D-8)
+    expected = y.loc["2024-06-11 00:00":"2024-06-11 08:00"].mean() - y.loc["2024-06-04 00:00":"2024-06-04 08:00"].mean()
+    assert np.allclose(day["morning_vs_last_week"], expected)
+
+
+@pytest.mark.parametrize("cutoff_hour", [0, 6, 9, 15])
+@pytest.mark.parametrize("target_day", ["2024-06-10", "2024-06-13"])
+def test_no_feature_uses_demand_after_the_cutoff(cutoff_hour, target_day):
+    """Changing demand from the cutoff time onwards must not change day D's features."""
+    df = synthetic(days=16)
+    day = pd.Timestamp(target_day)
+    cutoff = day if cutoff_hour == 0 else day - pd.Timedelta(days=1) + pd.Timedelta(hours=cutoff_hour)
+    feats = get_features(cutoff_hour)
+    base = make_features(df, cutoff_hour)
+
+    tampered = df.copy()
+    tampered.loc[cutoff:, "demand_mw"] = tampered.loc[cutoff:, "demand_mw"] * 3 + 5000
+    after = make_features(tampered, cutoff_hour)
+    pd.testing.assert_frame_equal(base.loc[target_day, feats], after.loc[target_day, feats])
+
+
+def test_midnight_features_would_leak_at_a_9am_cutoff():
+    """Sanity check of the test above: the default features do use D-1 data after 09:00."""
+    df = synthetic(days=14)
+    base = make_features(df)
+    tampered = df.copy()
+    tampered.loc["2024-06-11 09:00":, "demand_mw"] += 5000
+    after = make_features(tampered)
+    changed = (base.loc["2024-06-12", FEATURES] != after.loc["2024-06-12", FEATURES]).any()
+    assert set(changed[changed].index) == {"lag_24", "prev_day_mean", "prev_day_max"}
