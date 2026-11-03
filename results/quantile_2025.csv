@@ -1,0 +1,3 @@
+,Coverage (%),Below P10 (%),Above P90 (%),Mean width (MW),Pinball P10,Pinball P50,Pinball P90,P50 MAPE (%)
+Raw quantiles (refit 2019-2024),64.84,6.82,28.34,975.81,82.08,220.08,126.84,2.59
+Calibrated on 2024 (conformal),80.11,6.02,13.87,1319.74,87.41,253.44,107.13,2.97

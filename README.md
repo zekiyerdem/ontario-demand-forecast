@@ -99,6 +99,21 @@ The results above assume the forecast is made at midnight, when all of D-1 is kn
 
 ![MAPE by hour of day, midnight vs 09:00 cutoff](figures/cutoff_mape_by_hour_2025.png)
 
+## Probabilistic forecast (P10 / P50 / P90)
+
+Besides one number per hour, three LightGBM quantile models give a band: P10 and P90 should leave 10% of hours below and 10% above, so 80% of hours fall inside (`08_probabilistic_forecast.ipynb`, helpers in `src/intervals.py`). Midnight cutoff, 2025 test year:
+
+| Band | Coverage (target 80%) | Below P10 (%) | Above P90 (%) | Mean width (MW) | P50 MAPE (%) |
+|---|---:|---:|---:|---:|---:|
+| Raw quantiles (refit 2019–2024) | 64.8% | 6.8 | 28.3 | 976 | 2.59 |
+| **Calibrated on 2024 (conformal)** | **80.1%** | **6.0** | **13.9** | **1,320** | 2.97 |
+
+- **Raw quantile bands are over-confident.** They hold only 65% of 2025 hours, and 28% of hours land above P90. The band sits too low rather than too narrow: the same load-growth bias found in the error analysis.
+- **A split-conformal correction fixes the average.** Measured on 2024 (a year the models did not train on), it raises P90 by 331 MW and P10 by only 19 MW, and gives 80.1% coverage on 2025.
+- **The band still misses the peaks that matter.** Coverage is 71–75% in December, August, July, March and January. At the daily peak hour, demand was above P90 on 33% of 2025 days, and on 15 of the 20 highest-demand days.
+
+![P10-P90 band, winter and summer weeks of 2025](figures/quantile_band_weeks_2025.png)
+
 ## Notebooks
 
 | Notebook | What it covers |
@@ -110,6 +125,7 @@ The results above assume the forecast is made at midnight, when all of D-1 is kn
 | `05_error_analysis.ipynb` | Error by hour of day, weekday/weekend, holidays and the day after; forecast bias and load growth; the 10 worst days of 2025 |
 | `06_peak_demand.ipynb` | Daily peak MW and peak-hour accuracy, by season and on the highest-demand days; the 10 worst peak days of 2025 |
 | `07_forecast_cutoff.ipynb` | Realistic 09:00 forecast deadline vs midnight: accuracy, fair baselines, error by hour, feature importance |
+| `08_probabilistic_forecast.ipynb` | P10/P50/P90 quantile forecasts: coverage on 2025, conformal calibration on 2024, coverage by month and at the daily peak |
 
 ## Data
 
@@ -124,7 +140,8 @@ The results above assume the forecast is made at midnight, when all of D-1 is kn
 ```
 src/data.py        download + merge IESO demand and weather (cached to data/)
 src/features.py    calendar, holiday, heating/cooling-degree and lag features (midnight or 09:00 cutoff)
-tests/             pytest unit tests for the feature pipeline (incl. a no-leakage check)
+src/intervals.py   pinball loss, band coverage and conformal calibration for quantile forecasts
+tests/             pytest unit tests for the features (incl. a no-leakage check) and the interval helpers
 figures/           charts used in this README
 results/           baseline and test-set metric tables (CSV)
 ```
@@ -134,7 +151,7 @@ results/           baseline and test-set metric tables (CSV)
 ```bash
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
-jupyter notebook                   # run notebooks 02 to 07
+jupyter notebook                   # run notebooks 02 to 08
 python -m pytest                   # unit tests (no data download needed)
 ```
 
@@ -145,7 +162,7 @@ The tests run on small synthetic series. Besides checking lags, degree-days and 
 - Handle load growth (trend term or year-over-year target) to remove the 2025 under-forecast bias
 - Archived weather *forecasts* instead of observed weather (with the 09:00 cutoff, for a fully realistic number)
 - Population-weighted temperature across Ontario cities; humidex for summer peaks
-- Probabilistic (quantile) forecasts for peak-risk planning
+- Calibrate the quantile band by season or temperature, so it covers summer and winter peaks
 - SARIMAX and LSTM comparisons
 
 **Stack:** Python, pandas, scikit-learn, LightGBM, SHAP, matplotlib
