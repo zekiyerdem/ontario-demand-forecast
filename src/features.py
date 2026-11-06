@@ -12,9 +12,10 @@ when the forecast is made, i.e. which demand data is already known:
   cutoff and how D-1 morning compares with the same hours a week earlier.
 
 In both cases no demand feature uses data from after the cutoff.
-Weather features use the actual observed weather for day D as a
-stand-in for a day-ahead weather forecast (an optimistic assumption,
-noted in the README).
+By default, weather features use the actual observed weather for day D as
+a stand-in for a day-ahead weather forecast (an optimistic assumption,
+noted in the README). `with_forecast_weather` swaps in archived weather
+forecasts for day D instead (notebook 09).
 """
 import holidays
 import numpy as np
@@ -88,6 +89,34 @@ def make_features(df: pd.DataFrame, cutoff_hour: int = 0) -> pd.DataFrame:
     # lag_24 is intentionally missing after the cutoff; LightGBM handles NaN
     required = [c for c in get_features(cutoff_hour) if c != "lag_24" or cutoff_hour == 0]
     return out.dropna(subset=required + ["demand_mw"])
+
+
+WEATHER_COLS = ["temp_c", "rh_pct", "cloud_pct"]
+# features that describe the weather of day D itself (the ones a forecaster must take from a forecast)
+SAME_DAY_WEATHER = ["temp_c", "hdd", "cdd", "rh_pct", "cloud_pct", "temp_day_mean"]
+
+
+def with_forecast_weather(df: pd.DataFrame, forecast: pd.DataFrame, cutoff_hour: int = 0) -> pd.DataFrame:
+    """Features where day D's weather comes from a weather forecast.
+
+    `forecast` has the same weather columns as `df` (temp_c, rh_pct,
+    cloud_pct), e.g. from src.data.build_forecast_weather. For every hour it
+    covers, the same-day weather features (temperature, degree-days,
+    humidity, cloud, daily mean temperature) are rebuilt from the forecast.
+    Weather of earlier days (temp_lag_24, temp_prev_day_mean) stays observed,
+    and hours without a forecast keep observed weather. Demand features are
+    unchanged.
+    """
+    obs = make_features(df, cutoff_hour)
+    swapped = df.copy()
+    fc = forecast[WEATHER_COLS].reindex(swapped.index)
+    has_fc = fc.notna().all(axis=1)
+    swapped.loc[has_fc, WEATHER_COLS] = fc.loc[has_fc]
+    fc_feats = make_features(swapped, cutoff_hour)
+    out = obs.copy()
+    rows = out.index[has_fc.reindex(out.index, fill_value=False).to_numpy()]
+    out.loc[rows, SAME_DAY_WEATHER] = fc_feats.loc[rows, SAME_DAY_WEATHER]
+    return out
 
 
 FEATURES = [

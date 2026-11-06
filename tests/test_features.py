@@ -10,12 +10,14 @@ import pytest
 
 from src.features import (
     FEATURES,
+    SAME_DAY_WEATHER,
     add_calendar,
     add_lags,
     add_weather,
     clean,
     get_features,
     make_features,
+    with_forecast_weather,
 )
 
 
@@ -237,3 +239,53 @@ def test_midnight_features_would_leak_at_a_9am_cutoff():
     after = make_features(tampered)
     changed = (base.loc["2024-06-12", FEATURES] != after.loc["2024-06-12", FEATURES]).any()
     assert set(changed[changed].index) == {"lag_24", "prev_day_mean", "prev_day_max"}
+
+
+# ---------- archived weather forecasts (with_forecast_weather) ----------
+
+def fake_forecast(df, start, end, bias=3.0):
+    """A 'forecast' that is the observed weather plus a known error, for some hours only."""
+    fc = df.loc[start:end, ["temp_c", "rh_pct", "cloud_pct"]].copy()
+    fc["temp_c"] += bias
+    fc["rh_pct"] = 50.0
+    fc["cloud_pct"] = 100.0
+    return fc
+
+
+@pytest.mark.parametrize("cutoff_hour", [0, 9])
+def test_forecast_weather_replaces_same_day_weather_only(cutoff_hour):
+    df = synthetic(days=14)
+    fc = fake_forecast(df, "2024-06-10", "2024-06-11 23:00")
+    obs = make_features(df, cutoff_hour)
+    out = with_forecast_weather(df, fc, cutoff_hour)
+    day = "2024-06-11"
+
+    np.testing.assert_allclose(out.loc[day, "temp_c"], df.loc[day, "temp_c"] + 3.0)
+    assert (out.loc[day, "rh_pct"] == 50.0).all() and (out.loc[day, "cloud_pct"] == 100.0).all()
+    np.testing.assert_allclose(out.loc[day, "temp_day_mean"], df.loc[day, "temp_c"].mean() + 3.0)
+    np.testing.assert_allclose(out.loc[day, "hdd"], (18.0 - out.loc[day, "temp_c"]).clip(lower=0))
+    np.testing.assert_allclose(out.loc[day, "cdd"], (out.loc[day, "temp_c"] - 18.0).clip(lower=0))
+
+    # earlier days' weather stays observed, even though a forecast exists for D-1
+    for col in ["temp_lag_24", "temp_prev_day_mean"]:
+        pd.testing.assert_series_equal(out.loc[day, col], obs.loc[day, col])
+    # demand and calendar features are untouched
+    others = [c for c in get_features(cutoff_hour) if c not in SAME_DAY_WEATHER]
+    pd.testing.assert_frame_equal(out[others], obs[others])
+    assert out["demand_mw"].equals(obs["demand_mw"])
+
+
+def test_hours_without_a_forecast_keep_observed_weather():
+    df = synthetic(days=14)
+    fc = fake_forecast(df, "2024-06-11", "2024-06-11 23:00")
+    obs = make_features(df)
+    out = with_forecast_weather(df, fc)
+    outside = out.index.normalize() != pd.Timestamp("2024-06-11")
+    pd.testing.assert_frame_equal(out.loc[outside], obs.loc[outside])
+    assert out.index.equals(obs.index)
+
+
+def test_perfect_forecast_gives_the_observed_features():
+    df = synthetic(days=14)
+    fc = df[["temp_c", "rh_pct", "cloud_pct"]]
+    pd.testing.assert_frame_equal(with_forecast_weather(df, fc), make_features(df))

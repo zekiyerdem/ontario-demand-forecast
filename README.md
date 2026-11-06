@@ -4,7 +4,7 @@
 
 Day-ahead forecasting of Ontario's hourly electricity demand using public IESO data (2019–2026) and hourly weather.
 
-**Result on the 2025 test year:** a LightGBM model with calendar and weather features forecasts next-day hourly demand with **2.6% MAPE (448 MW MAE)**, **41% lower error** than the "same hour yesterday" baseline, and predicts each day's peak within **2.8%** on average. With a realistic **09:00 EST forecast deadline** on the day before, the honest numbers are **3.2% MAPE (541 MW MAE)** and **3.5% daily-peak MAPE**, half the error of the best forecast possible at that time without a model ([details](#realistic-forecast-deadline-0900-cutoff)).
+**Result on the 2025 test year:** a LightGBM model with calendar and weather features forecasts next-day hourly demand with **2.6% MAPE (448 MW MAE)**, **41% lower error** than the "same hour yesterday" baseline, and predicts each day's peak within **2.8%** on average. With a realistic **09:00 EST forecast deadline** on the day before, the honest numbers are **3.2% MAPE (541 MW MAE)** and **3.5% daily-peak MAPE**, half the error of the best forecast possible at that time without a model ([details](#realistic-forecast-deadline-0900-cutoff)). Replacing observed weather with **archived weather forecasts** as well gives the fully realistic result: **3.5% MAPE (606 MW MAE)** and **3.7% daily-peak MAPE** ([details](#real-weather-forecasts-instead-of-observed-weather)).
 
 ![Forecast vs actual, winter and summer weeks of 2025](figures/forecast_weeks_2025.png)
 
@@ -114,6 +114,25 @@ Besides one number per hour, three LightGBM quantile models give a band: P10 and
 
 ![P10-P90 band, winter and summer weeks of 2025](figures/quantile_band_weeks_2025.png)
 
+## Real weather forecasts instead of observed weather
+
+All results above give the model the *observed* weather of the forecast day, which nobody knows in advance. `09_weather_forecast.ipynb` replaces it with **archived weather forecasts** from the [Open-Meteo Previous Runs API](https://open-meteo.com/en/docs/previous-runs-api) (what the weather model predicted 1 or 2 days earlier, available from 2024). The models are unchanged (trained on observed weather, 2019–2024); only the 2025 inputs for day D change. At midnight the 1-day-ahead forecast is already issued; at 09:00 only the 2-day-ahead forecast is available for every hour.
+
+| Cutoff | Weather for day D | MAE (MW) | MAPE (%) | Daily peak MAPE (%) |
+|---|---|---:|---:|---:|
+| Midnight | Observed (optimistic) | 448 | 2.63 | 2.76 |
+| Midnight | 1-day-ahead forecast | 485 | 2.84 | 2.81 |
+| 09:00 | Observed (optimistic) | 541 | 3.17 | 3.46 |
+| 09:00 | **2-day-ahead forecast (fully realistic)** | **606** | **3.54** | **3.71** |
+| 09:00 | Persistence, same hour 2 days ago | 1,080 | 6.52 | 5.66 |
+
+- **The two optimistic assumptions were worth about 0.9 MAPE points together**: about 0.5 for the midnight deadline and 0.2–0.4 for perfect weather knowledge. The fully realistic model still cuts the error of the best naive forecast at 09:00 by 44%.
+- **The weather forecasts themselves are good.** In 2025 the hourly temperature forecast missed by 1.23 °C (1 day ahead) and 1.42 °C (2 days ahead); the daily mean by 0.77 °C and 1.08 °C.
+- **Summer pays the most.** At 09:00, June MAPE goes from 3.49% to 4.53% and July from 4.11% to 5.25%: with air conditioning, a 1–2 °C miss becomes a large MW miss.
+- **The costly weather miss is the one that makes demand look lower.** From June to September a forecast at least 1 °C too cold adds 2.26 MAPE points; from October to May a forecast at least 1 °C too warm adds 0.85. These misses add to the model's existing under-forecast (load growth), while misses in the other direction partly cancel it.
+
+![Effect of weather forecast errors, 2025](figures/weather_forecast_effect_2025.png)
+
 ## Notebooks
 
 | Notebook | What it covers |
@@ -126,22 +145,24 @@ Besides one number per hour, three LightGBM quantile models give a band: P10 and
 | `06_peak_demand.ipynb` | Daily peak MW and peak-hour accuracy, by season and on the highest-demand days; the 10 worst peak days of 2025 |
 | `07_forecast_cutoff.ipynb` | Realistic 09:00 forecast deadline vs midnight: accuracy, fair baselines, error by hour, feature importance |
 | `08_probabilistic_forecast.ipynb` | P10/P50/P90 quantile forecasts: coverage on 2025, conformal calibration on 2024, coverage by month and at the daily peak |
+| `09_weather_forecast.ipynb` | Archived 1- and 2-day-ahead weather forecasts instead of observed weather: weather forecast skill, the fully realistic 2025 accuracy, when weather errors hurt |
 
 ## Data
 
 - **Demand:** [IESO public hourly demand reports](https://reports-public.ieso.ca/public/Demand/). IESO reports in Eastern Standard Time all year (no daylight saving).
-- **Weather:** hourly Toronto temperature, humidity and cloud cover from the [Open-Meteo historical archive](https://open-meteo.com/), pulled on the same fixed UTC-5 clock so it lines up with IESO hours.
+- **Weather:** hourly Toronto temperature, humidity and cloud cover from the [Open-Meteo historical archive](https://open-meteo.com/), pulled on the same fixed UTC-5 clock so it lines up with IESO hours, one year per request with a retry.
+- **Weather forecasts:** archived 1- and 2-day-ahead Toronto forecasts (2024–2025) from the [Open-Meteo Previous Runs API](https://open-meteo.com/en/docs/previous-runs-api), same clock and variables.
 - One missing hour (2025-05-01 00:00) is linearly interpolated.
 
-**Assumption:** the models use *observed* weather for the forecast day as a stand-in for a day-ahead weather forecast, so real operational accuracy would be somewhat lower.
+**Assumption:** notebooks 03–08 use *observed* weather for the forecast day as a stand-in for a day-ahead weather forecast. Notebook 09 measures the cost of that assumption with archived forecasts (2.63% → 2.84% MAPE at midnight, 3.17% → 3.54% at 09:00).
 
 ## Project structure
 
 ```
-src/data.py        download + merge IESO demand and weather (cached to data/)
-src/features.py    calendar, holiday, heating/cooling-degree and lag features (midnight or 09:00 cutoff)
+src/data.py        download + merge IESO demand and weather, archived weather forecasts (cached to data/)
+src/features.py    calendar, holiday, heating/cooling-degree and lag features (midnight or 09:00 cutoff); swap in forecast weather
 src/intervals.py   pinball loss, band coverage and conformal calibration for quantile forecasts
-tests/             pytest unit tests for the features (incl. a no-leakage check) and the interval helpers
+tests/             pytest unit tests for the features (incl. a no-leakage check), the weather download helpers and the interval helpers
 figures/           charts used in this README
 results/           baseline and test-set metric tables (CSV)
 ```
@@ -151,7 +172,7 @@ results/           baseline and test-set metric tables (CSV)
 ```bash
 pip install -r requirements.txt
 python -m src.data                 # downloads data into data/
-jupyter notebook                   # run notebooks 02 to 08
+jupyter notebook                   # run notebooks 02 to 09
 python -m pytest                   # unit tests (no data download needed)
 ```
 
@@ -160,7 +181,7 @@ The tests run on small synthetic series. Besides checking lags, degree-days and 
 ## Next steps
 
 - Handle load growth (trend term or year-over-year target) to remove the 2025 under-forecast bias
-- Archived weather *forecasts* instead of observed weather (with the 09:00 cutoff, for a fully realistic number)
+- Train on archived weather forecasts (2024 on) so the model learns how far to trust them
 - Population-weighted temperature across Ontario cities; humidex for summer peaks
 - Calibrate the quantile band by season or temperature, so it covers summer and winter peaks
 - SARIMAX and LSTM comparisons
